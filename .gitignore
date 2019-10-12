@@ -1,0 +1,11 @@
+# 檔案名稱 .gitignore
+
+*.csv
+*.zip
+*.yml
+*.html
+*.txt
+*.json
+*.log
+*.png
+
