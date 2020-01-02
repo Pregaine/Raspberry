@@ -1,8 +1,9 @@
-# coding: utf-8
 import requests
+from twstock import Stock
 import numpy as np
 import pandas as pd
 import talib
+# import logging
 from datetime import datetime, timedelta
 import threading
 import math
@@ -10,8 +11,6 @@ import time
 from bs4 import BeautifulSoup as BS
 import os
 import codes.codes as TWSE
-
-
 
 class Technical_Indicator:
     """ 輸入線型周期, 查詢股價
@@ -24,7 +23,7 @@ class Technical_Indicator:
         30 30分鐘 
         60 60分鐘
         """
-    def __init__( self, num = '2497', item = 'D', tree = '', **d ):
+    def __init__( self, num = '2497', item = 'D', tree = '', web_choose = 0, **d ):
 
         path = { '60': '{}_60分線技術指標.csv'.format( num ),
                  'D': '{}_日線技術指標.csv'.format( num ),
@@ -35,32 +34,22 @@ class Technical_Indicator:
         self.number = num
         self.df = pd.DataFrame( )
         self.type = item
-        
+        self.web_choose = web_choose
+
         self.days = d[ item ]
 
     def GetDF( self ):
 
+        # url = "http://5850web.moneydj.com/z/BCD/czkc1.djbcd?a=2330&b=W&c=2880&E=1&ver=5"
         url = "http://5850web.moneydj.com/z/BCD/czkc1.djbcd"
-        querystring = { "a": self.number, "b": self.type, "c": self.days, "E": "1", "ver": "5" }
         
-        """
-        headers = {
-            'user-agent': "Chrome/64.0.3282.186",
-            'content-type': "text/html;charset=big5",
-            'accept': "*/*",
-            'referer': "http://5850web.moneydj.com/z/zc/zcw/zcw1.DJHTM?A={}".format( self.number ),
-            'accept-encoding': "gzip, deflate",
-            'accept-language': "zh-TW,q=0.9,zh;q=0.8,en-US;q=0.7,en;q=0.6",
-            'cache-control': "no-cache", }
-        """
-            
-        start_tmr = datetime.now( )
-        
-        # time.sleep( 1 )    
-            
-        try:
-            response = requests.get( url, params = querystring, timeout = 3 )
-            # response = requests.request( "GET", url, headers = headers, params = querystring, timeout = 5 )
+        # 查詢參數
+        my_params = { 'a': self.number, 'b': self.type, 'c': self.days,  "E": "1", "ver": "5" }
+                
+        time.sleep( 1 )        
+                
+        try:            
+            response = requests.get( url, params = my_params, timeout = 3 )
             response.encoding = 'big5'
 
             if u'您要尋找的資源有問題而無法顯示' in response.text:
@@ -88,11 +77,9 @@ class Technical_Indicator:
         except ValueError:
             print( data )
             return False
-
-        self.df[ '日期' ] = pd.to_datetime( self.df[ '日期' ], format = "%Y/%m/%d" )
         
-        consumption = datetime.now( ) - start_tmr
-        print( '股號{0:>7} 捉取耗時{1:>4} S'.format( self.number, consumption.seconds ) )
+        self.df[ '日期' ] = pd.to_datetime( self.df[ '日期' ], format = "%Y/%m/%d" )
+
         return True
 
     def CombineDF( self ):
@@ -101,11 +88,7 @@ class Technical_Indicator:
             df_read = pd.read_csv( self.path, sep = ',', encoding = 'utf8', false_values = 'NA', dtype={ '日期': str } )
             df_read = df_read[ [ '日期', '開盤', '最高', '最低', '收盤', '成交量'  ] ]
 
-            # if self.type is not '60':
             df_read[ '日期' ] = pd.to_datetime( df_read[ '日期' ], format = "%y%m%d" )
-            # else:
-            # df_read[ '日期' ] = pd.to_datetime( df_read[ '日期' ], format = "%y%m%d%H" )
-
             self.df = pd.concat( [ df_read, self.df ], ignore_index = True )
 
             self.df.drop_duplicates( [ '日期' ], keep = 'last', inplace = True )
@@ -116,8 +99,7 @@ class Technical_Indicator:
             pass
             print( str( e ) )
             # logging.exception( e )
-            print( self.path, '首次存檔' )
-            
+            # print( self.path, '首次存檔' )
 
     # Money Flow Index and Ratio
     def MFI( self, n ):
@@ -126,19 +108,19 @@ class Technical_Indicator:
         i = 0
         PosMF = [ 0 ]
         NegMF = [ 0 ]
-        
+
         while i < self.df.index[ -1 ]:
-        
+
             if PP[ i + 1 ] > PP[ i ]:
-                PosMF.append( PP[ i + 1 ] * self.df.iloc[ i + 1, : ][ '成交量' ] )
+                PosMF.append( PP[ i + 1 ] * self.df.get_value( i + 1, '成交量' ) )
             else:
                 PosMF.append( 0 )
 
             if PP[ i + 1 ] > PP[ i ]:
                 NegMF.append( 0 )
             else:
-                NegMF.append( PP[ i + 1 ] * self.df.iloc[ i + 1, : ][ '成交量' ] )
-                
+                NegMF.append( PP[ i + 1 ] * self.df.get_value( i + 1, '成交量' ) )
+
             i = i + 1
 
         NegMF = pd.Series( NegMF )
@@ -185,10 +167,10 @@ class Technical_Indicator:
         dem_str = 'DEM' + str( LONGPERIOD )
         osc_str = 'OSC' + str( SHORTPERIOD ) + ',' + str( LONGPERIOD ) + ',' + str( SMOOTHPERIOD )
 
-        self.df[ dif_str ], self.df[ dem_str ], self.df[ osc_str ] = talib.MACD( DIF, SHORTPERIOD, LONGPERIOD,
-                                                                                SMOOTHPERIOD )
-
-
+        self.df[ dif_str ], self.df[ dem_str ], self.df[ osc_str ] = talib.MACD( DIF, 
+                                                                                 SHORTPERIOD, 
+                                                                                 LONGPERIOD,
+                                                                                 SMOOTHPERIOD )
         # ------ MACD End. ------------------------------
 
     def GetWR( self, lst ):
@@ -271,13 +253,12 @@ class Technical_Indicator:
 
         self.df = self.df.iloc[ ::-1 ]
 
-    # def PCT_Change( self, df_w, df_m ):
-    def PCT_Change( self ):
-        
-        """
+    def PCT_Change( self, df_w, df_m ):
+
         tmp_w_lst = [ ]
         tmp_m_lst = [ ]
-                
+        
+        
         for date in self.df[ '日期' ]:
 
             now_price = self.df[ self.df[ '日期' ] == date ][ '收盤' ].values[ 0 ]
@@ -298,15 +279,11 @@ class Technical_Indicator:
                 tmp_m_lst.append( ( now_price - month_close_price ) / month_close_price * 100 )
             except Exception:
                 tmp_m_lst.append( None )
-        """
 
-        self.df[ '日漲幅' ] = self.df[ '收盤' ].pct_change( 1 ) * 100      
-        self.df[ '周漲幅' ] = None
-        self.df[ '月漲幅' ] = None
-        # self.df[ '周漲幅' ] = tmp_w_lst
-        # self.df[ '月漲幅' ] = tmp_m_lst
-        
-        
+        self.df[ '日漲幅' ] = self.df[ '收盤' ].pct_change( 1 ) * 100
+        self.df[ '周漲幅' ] = tmp_w_lst
+        self.df[ '月漲幅' ] = tmp_m_lst
+
     # TODO 對方網站改變60分線取消月字串，導致錯誤 18/03/03
     def ConverYearLst( self ):
 
@@ -352,14 +329,9 @@ class Technical_Indicator:
         # cols = [ '券商', '日期', '買進均價', '賣出均價', '買進張數', '賣出張數', '買賣超張數', '買賣超股數', '買進價格*張數', '賣出價格*張數',
         #          '買賣超金額', '買賣超佔股本比', '股本', '收盤', '成交量' ]
         # self.df_d.reindex( columns = cols )
-
         self.df = self.df.replace( [ np.inf, -np.inf ], np.nan )
         self.df = self.df.round( decimals =  2 )
-
-        # if self.type is not '60':
         self.df.to_csv( self.path, sep = ',', encoding = 'utf-8', date_format='%y%m%d' )
-        # else:
-        # self.df.to_csv( self.path, sep = ',', encoding = 'utf-8', date_format='%y%m%d%H' )
 
 def _GetMonth( obj ):
 
@@ -375,7 +347,8 @@ def _GetMonth( obj ):
     #         obj.GetDF( )
     # except FileNotFoundError:
 
-    obj.GetDF( choose )
+    if obj.GetDF( ) == False:
+        return False
 
     obj.CombineDF( )
 
@@ -391,9 +364,11 @@ def _GetMonth( obj ):
     obj.GetTi( )
     obj.SaveCSV( )
 
-def _GetWeek( obj ):
+def _GetWeek( obj, update_w ):
 
-    obj.GetDF( )
+    if obj.GetDF( ) == False:
+        return False
+        
     obj.CombineDF( )
 
     obj.GetMA( [ 4, 12, 24, 48, 96, 144, 240, 480 ] )
@@ -408,12 +383,11 @@ def _GetWeek( obj ):
     obj.GetTi( )
     obj.SaveCSV( )
 
-# def _GetDay( obj, week, month ):
-def _GetDay( obj ):
+def _GetDay( obj, week, month ):
 
     obj.CombineDF( )
-    # obj.PCT_Change( week.df, month.df )
-    obj.PCT_Change( )
+
+    obj.PCT_Change( week.df, month.df )
 
     obj.GetMA( [ 3, 5, 8, 10, 20, 60, 120, 240, 480, 600, 840, 1200 ] )
     obj.GetRSI( [ 2, 4, 5, 10 ] )
@@ -478,44 +452,23 @@ def _DetStockIsNotExist( number ):
     else:
         return  False
 
-# def GetFile( lst, update_m, update_w, update_h ):
 def GetFile( lst ):
 
-    # query = { 'W': 480, 'D': 1200, 'M': 120, '60': 1200 }
-    query = { 'W': 2, 'D': 8, 'M': 1, '60': 10 }
-    # query = { 'W': 480, 'D': 600, 'M': 120, '60': 1200 }
-    lst = list( lst )
-    path = './技術指標/day'
+    query = { 'W': 480, 'D': 1200, 'M': 120, '60': 1200 }
+    # query = { 'W': 2880, 'D': 8, 'M': 1, '60': 10 }
+    path = './技術指標/month'
 
     while lst:
 
         start_tmr = datetime.now( )
         stock = lst.pop( 0 )
-        # ti_W  = Technical_Indicator( stock, 'W', path, **query )
-        # ti_M  = Technical_Indicator( stock, 'M', path, **query )
-        # ti_60 = Technical_Indicator( stock, '60', path, **query )
-        ti_D  = Technical_Indicator( stock, 'D', path, **query )
-
-        # try:
-        # if _Get60Minute( ti_60, update_h ):
-            # continue
-
-        # _GetWeek( ti_W )
-        # _GetMonth( ti_M )
-
-        if ti_D.GetDF( ) is False:
-            # lst.append( stock )
+        ti_M  = Technical_Indicator( stock, 'M', path, **query )
+  
+        if _GetMonth( ti_M ) == False:
+            lst.append( stock )
+            print( '股號{0:>7} 捉取失敗 {1}'.format( stock, len( lst ) ) )
             continue
-
-        # _GetDay( ti_D, ti_W, ti_M )
-        _GetDay( ti_D )   
-           
-        # except Exception as e:
-        #     print( e )
-        #     if '{}'.format( e ) != 'day is out of range for month':
-        #   lst.append( stock )
-        #  print( 'lst.append({})'.format( stock ) )
-
+        
         consumption = datetime.now( ) - start_tmr
         print( '股號{0:>7} 耗時{1:>4} Second {2}'.format( stock, consumption.seconds, len( lst ) ) )
 
@@ -533,44 +486,23 @@ def CompareFileModifyTime( path, hour = 12 ):
         return False
 
 def main( ):
-
     """範例http://5850web.moneydj.com/z/zc/zcw/zcw1_3312.djhtm"""
 
     empty_lst = list( TWSE.codes.keys( ) )
     stock_lst = [ ]
-
+    
     for stock in empty_lst:
-        if CompareFileModifyTime( './技術指標/day/{0}_日線技術指標.csv'.format( stock ) ):
+        if CompareFileModifyTime( './技術指標/week/{0}_月線技術指標.csv'.format( stock ) ):
             continue
         stock_lst.append( stock )
 
+    # stock_lst = empty_lst
+    # stock_lst = [ '2025', '8021' ]
     print( '股票需更新{}支'.format( len( stock_lst ) ) )
 
-    # thread_count = 1
-    # update_m = False
-    # update_w = False
-    # update_h = False
-    # thread_list = [ ]
-    
-    Savefiledir = './技術指標/day'
-    if not os.path.isdir( Savefiledir ):
-        os.makedirs( Savefiledir )
-
     GetFile( stock_lst )
-        
-    '''
-    for i in range( thread_count ):
-        start = math.floor( i * len( stock_lst ) / thread_count )
-        end   = math.floor( ( i + 1 ) * len( stock_lst ) / thread_count )
-        thread_list.append( threading.Thread( target = GetFile, args = ( stock_lst[ start:end ], update_m, update_w, update_h ) ) )
 
-    for thread in thread_list:
-        thread.start( )
 
-    for thread in thread_list:
-        thread.join( )
-    '''
-        
 if __name__ == '__main__':
 
     start_time = time.time( )

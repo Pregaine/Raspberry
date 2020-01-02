@@ -10,7 +10,7 @@ echo $currentDate
 cd /home/pi/Downloads
 
 /home/pi/miniconda3/envs/py36/bin/python /home/pi/Downloads/捉取寫入集保庫存.py \
-"20190927" "20190920" "20190912" "20191009" "20191005"
+"20191206" "20191129" "20191227" "20191220" "20191213"
 
 echo "執行捉取寫入集保庫存結束"
 

@@ -91,7 +91,10 @@ def main( ):
     # print( stock_lst )
 
     url = "https://www.tdcc.com.tw/smWeb/QryStockAjax.do"
-    headers = { 'content-type'  : "application/x-www-form-urlencoded" }
+    headers = { 
+                  'content-type'  : "application/x-www-form-urlencoded",
+                  'User-Agent' : 'Chrome/79.0.3945.88'
+    }
 
     while len( stock_lst ) != 0:
 
